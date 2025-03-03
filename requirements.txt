@@ -1,0 +1,4 @@
+cx-Oracle
+pandas
+numpy
+python-dotenv
