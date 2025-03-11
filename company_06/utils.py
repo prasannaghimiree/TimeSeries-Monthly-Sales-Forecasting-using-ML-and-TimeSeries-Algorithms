@@ -73,16 +73,16 @@ df.to_csv(r'forecast_output\forecast_final.csv')
 print("**********************************************************************")
 
 nepali_months = {
-    "baisakh": "01", "baisak": "01", "baishakh": "01", "baishak": "01",
+    "baisakh": "01", "baisak": "01", "baishakh": "01", "baishak": "01","baaisakh":"01",
     "jestha": "02", "jeshtha": "02", "jesth": "02", "jeth": "02",
     "asadh": "03", "asad": "03", "ashad": "03", "ashadh": "03", "asaadh": "03", "asar": "03",
     "shrawan": "04", "saun": "04", "shawan": "04", "sawan": "04", "shraban": "04",
     "bhadra": "05", "bhadau": "05", "bhadaw": "05", "bhad": "05",
-    "asoj": "06", "ashoj": "06", "ashwin": "06",
-    "kartik": "07", "kattik": "07",
-    "mangsir": "08", "mangshir": "08", "mansir": "08",
+    "asoj": "06", "ashoj": "06", "ashwin": "06","ashoz":"06",
+    "kartik": "07", "kattik": "07","katik":"07","kaatik":"07",
+    "mangsir": "08", "mangshir": "08", "mansir": "08","mangser":"08", "mangseer":"08",
     "poush": "09", "push": "09", "pous": "09", "posh": "09",
-    "magh": "10", "mag": "10",
+    "magh": "10", "mag": "10","maag":"10","marga":"10",
     "falgun": "11", "phalgun": "11", "falgoon": "11", "fagun": "11",
     "chaitra": "12", "chait": "12"
 }
@@ -191,102 +191,6 @@ def query_csv(query):
         "for_data": [],
     }
 
-
-# import pandas as pd
-# import re
-
-# # Nepali months mapping
-# nepalii_months = {
-#     "01": "baisakh", "02": "jestha", "03": "ashadh", "04": "shrawan",
-#     "05": "bhadra", "06": "asoj", "07": "kartik", "08": "mangsir",
-#     "09": "poush", "10": "magh", "11": "falgun", "12": "chaitra"
-# }
-
-# def query_csv(query):
-#     query = query.lower()
-#     match = re.search(r"(\d{4})[-\s]?(\d{2}|\w+)", query)
-
-#     if match:
-#         year, month = match.groups()
-        
-#         if month in nepalii_months:
-#             month = nepalii_months[month]
-#         else:
-#             month = nepalii_months.get(month.zfill(2), month)  
-
-#         result = df[df["forecast_date"].str.startswith(f"{year}-{month}")]
-
-    
-
-#         # Load historical data
-#         historical_data = pd.read_csv("hisdata.csv", parse_dates=["date"])
-
-#         # Ensure required columns exist
-#         if "date" in historical_data.columns and "sales" in historical_data.columns:
-#             date_list = [f"{date.year}-{nepalii_months[date.strftime('%m')]}" for date in historical_data["date"]]
-#             sales_list = historical_data["sales"].astype(str).tolist()
-#         else:
-#             return {"error": "Historical data file is missing required columns"}, 500
-
-#         if not result.empty:
-#             forecast_value = result["forecast_sales"].values[0]
-#             desc = get_random_response()
-
-#             return {
-#                 "query": query,
-#                 "question": f"Forecasted sales for {year}-{month}?",
-#                 "graph_keys": [["forecast_date", "forecast_sales"]],
-#                 "desc": desc,
-#                 "for_data": [{"date": date, "sales": sales} for date, sales in zip(date_list, sales_list)]
-#             }
-#         else:
-#             return {
-#                 "query": query,
-#                 "question": f"Forecasted sales for {year}-{month}?",
-#                 "graph_keys": [],
-#                 "desc": "No forecast data found for this date.",
-#                 "for_data": []
-#             }
-
-#     elif "average" in query or "mean" in query:
-#         months = re.findall(r"(\d{2}|\w+)", query)
-#         numeric_months = []
-
-#         for month in months:
-#             if month in nepalii_months:
-#                 numeric_months.append(nepalii_months[month])
-#             elif month.isdigit():
-#                 numeric_months.append(nepalii_months.get(month.zfill(2), month))
-
-#         filtered_df = df[df["forecast_date"].str.split('-').str[1].isin(numeric_months)]
-
-#         if not filtered_df.empty:
-#             avg_sales = filtered_df["forecast_sales"].mean()
-#             desc = get_random_response()
-
-#             return {
-#                 "query": query,
-#                 "question": f"Average forecasted sales from {months[0]} to {months[-1]}?",
-#                 "graph_keys": [["forecast_date", "forecast_sales"]],
-#                 "desc": desc,
-#                 "for_data": [{"date": "Average", "sales": avg_sales}]
-#             }
-#         else:
-#             return {
-#                 "query": query,
-#                 "question": f"Average forecasted sales from {months[0]} to {months[-1]}?",
-#                 "graph_keys": [],
-#                 "desc": "No data available for the given months.",
-#                 "for_data": [],
-#             }
-
-#     return {
-#         "query": query,
-#         "question": "Sorry, I couldn't understand the query.",
-#         "graph_keys": [],
-#         "desc": "Could not process the request.",
-#         "for_data": [],
-#     }
 
 def get_random_response():
     responses = [
