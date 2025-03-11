@@ -2,7 +2,7 @@ queries.txt
 .env
 best_ann_model.pth
 company_03
-company_06
+# company_06
 dataset
 new_data_without_return_value
 best_ann_model.pth
