@@ -1,100 +1,231 @@
-from flask import Flask, jsonify, Response
-import joblib
-import numpy as np
+from flask import Flask, request, jsonify, Response
 import pandas as pd
-import matplotlib.pyplot as plt
-from io import BytesIO
-import plotly.express as px
-import plotly.io as pio
-from datetime import datetime
+import os
+import json
+from dotenv import load_dotenv
+from langchain_together import ChatTogether
+from langchain.agents import initialize_agent, AgentType
+from langchain.agents import Tool
+from langchain.memory import ConversationBufferMemory
+from utils import query_csv
 
+history_data = r"Dataset\merge_06.csv"
+
+load_dotenv()
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 app = Flask(__name__)
-
-# Load data and models
-df = pd.read_csv("merge_06.csv", parse_dates=["date"], index_col="date")
-df = df.sort_index().dropna()
-
-# loading saved model
-model = joblib.load("new_model.pkl")
-scaler_X = joblib.load("scaler_X.pkl")
-scaler_y = joblib.load("scaler_y.pkl")
-
-def generate_forecast():
-    # Forecasting logic
-    last_date = df.index[-1]
-    future_dates = pd.date_range(start=last_date + pd.DateOffset(months=1), periods=6, freq='MS')
-    
-    future_df = pd.DataFrame(index=future_dates)
-    future_df['year'] = future_df.index.year
-    future_df['month'] = future_df.index.month
-    future_df['quarter'] = future_df.index.quarter
-    
-    full_df = pd.concat([df, future_df])
-    required_features = ['year', 'month', 'quarter', 'lag_1', 'lag_11', 
-                        'lag_12', 'lag_13', 'rolling_mean_3', 'rolling_mean_6']
-    
-    forecast_df = full_df.copy()
-    forecast_df.loc[future_dates[0], 'lag_1'] = df['sales'].iloc[-1]
-    
-    for i, date in enumerate(future_dates):
-        if i > 0:
-            prev_date = future_dates[i-1]
-            forecast_df.loc[date, 'lag_1'] = forecast_df.loc[prev_date, 'sales']
+# Initialize LLM from TOgether AI
+llm = ChatTogether(
+    model="meta-llama/Llama-3-70b-chat-hf",
+    temperature=0,
+    max_tokens=None,
+    timeout=None,
+    max_retries=2,
+)
+tools = [
+    Tool(
+        name="CSV Reader",
+        func=query_csv,
+        description=(
+            "Extracts forecasted sales data from the dataset based on user queries."
+            "Understands both numerical months (e.g., '2082-04') and Nepali month names (e.g., '2082 Baisakh') and relative months. "
+            "If the user asks about relative dates like next|upcoming|previous|last|current, first calculate the present date and identify it accordingly. "
+            "Supports retrieving specific sales or calculating the average sales over a given range. "
+            "If the user asks about sales within a range of months, return data separately for all in-between dates. "
+            "Read Nepali month names correctly and get their index properly."
+            "Give the final answer as a whole in json which includes question, graph_keys, desc, for_data."
+            "If it is asked to calculate an average sales between month_1 to month_n then calculate average using average library of python."
+            "Donot give any description, If you dont know simply leave a blank but donot say anything."
+            "Enclose all property in double quotes"
         
-        for offset in [11, 12, 13]:
-            try:
-                forecast_df.loc[date, f'lag_{offset}'] = forecast_df.loc[date - pd.DateOffset(months=offset), 'sales']
-            except KeyError:
-                forecast_df.loc[date, f'lag_{offset}'] = forecast_df[f'lag_{offset}'].mean()
-        
-        available_data = forecast_df['sales'].dropna()
-        for window in [3, 6]:
-            if len(available_data) >= window:
-                forecast_df.loc[date, f'rolling_mean_{window}'] = available_data[-window:].mean()
-        
-        X = forecast_df.loc[date, required_features].values.reshape(1, -1)
-        X_scaled = scaler_X.transform(X)
-        prediction = scaler_y.inverse_transform(model.predict(X_scaled).reshape(-1, 1))
-        forecast_df.loc[date, 'sales'] = prediction[0][0]
-    
-    return forecast_df.loc[future_dates, 'sales']
+        ),
+    )
+]
 
-@app.route('/forecast', methods=['GET'])
-def get_forecast():
-    forecast = generate_forecast()
-    result = {date.strftime('%Y-%m-%d'): round(value, 2) 
-             for date, value in forecast.items()}
-    return jsonify(result)
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-@app.route('/plot/matplotlib', methods=['GET'])
-def matplotlib_plot():
-    forecast = generate_forecast()
-    
-    plt.figure(figsize=(12, 6))
-    forecast.plot(kind='line', marker='o', title='6-Month Sales Forecast')
-    plt.xlabel('Date')
-    plt.ylabel('Sales')
-    plt.grid(True)
-    plt.tight_layout()
-    
-    img_buffer = BytesIO()
-    plt.savefig(img_buffer, format='png')
-    img_buffer.seek(0)
-    plt.close()
-    
-    return Response(img_buffer.getvalue(), mimetype='image/png')
+agent = initialize_agent(
+    tools=tools,
+    llm=llm,
+    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    memory=memory,
+    verbose=True,
+)
 
-@app.route('/plot/plotly', methods=['GET'])
-def plotly_visualization():
-    forecast = generate_forecast().reset_index()
-    forecast.columns = ['Date', 'Sales']
-    
-    fig = px.line(forecast, x='Date', y='Sales', 
-                 title='6-Month Sales Forecast',
-                 markers=True, template='plotly_dark')
-    fig.update_layout(hovermode='x unified')
-    
-    return pio.to_html(fig, full_html=False)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+@app.route("/assistant", methods=["POST"])
+def assistant():
+    data = request.get_json()
+
+    if not data or "query" not in data:
+        return jsonify({"error": "Query parameter is required"}), 400
+
+    query = data["query"]
+
+    historical_data = pd.read_csv(history_data)
+    historical_data["date"] = historical_data["date"].astype(str)
+    historical_data[["year", "month"]] = historical_data["date"].str.split("-", expand=True)
+
+    # Map number to nepali month names
+    nepali_months = {
+        "01": "Baisakh",
+        "02": "Jestha",
+        "03": "Ashadh",
+        "04": "Shrawan",
+        "05": "Bhadra",
+        "06": "Ashoj",
+        "07": "Kartik",
+        "08": "Mangsir",
+        "09": "Poush",
+        "10": "Magh",
+        "11": "Falgun",
+        "12": "Chaitra",
+    }
+
+    # Replacing month number to month name
+    historical_data["nepali_date"] = (
+        historical_data["year"] + "-" + historical_data["month"].map(nepali_months)
+    )
+
+    print(historical_data[["nepali_date"]])
+
+    response = agent.run(query)
+    print("*********************************************************************************")
+    print("Type is:>> ", type(response))
+    ("*********************************************************************************")
+
+    load_response = json.loads(response)
+    print("Type of load response is :", load_response)
+  
+
+
+    date_list = historical_data["nepali_date"].astype(str).tolist()
+    sales_list = historical_data["sales"].astype(str).tolist()
+
+# Add historical data to the response
+    load_response["data"] = {
+    "date": date_list,
+    "sales": sales_list
+    }
+
+    final_response = json.dumps(load_response)
+
+    return final_response
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
+
+# from flask import Flask, request, jsonify, Response
+# import pandas as pd
+# import os
+# from dotenv import load_dotenv
+# from langchain_together import ChatTogether
+# from langchain.agents import initialize_agent, AgentType
+# from langchain.agents import Tool
+# from langchain.memory import ConversationBufferMemory
+# from utils import query_csv
+# import json
+
+# history_data = r"Dataset\merge_06.csv"
+
+# load_dotenv()
+# TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+# app = Flask(__name__)
+
+# # Initialize LLM from TOgether AI
+# llm = ChatTogether(
+#     model="meta-llama/Llama-3-70b-chat-hf",
+#     temperature=0,
+#     max_tokens=None,
+#     timeout=None,
+#     max_retries=2,
+# )
+
+# tools = [
+#     Tool(
+#         name="CSV Reader",
+#         func=query_csv,
+#         description=(
+#             "Extracts forecasted sales data from the dataset based on user queries."
+#             "Understands both numerical months (e.g., '2082-04') and Nepali month names (e.g., '2082 Baisakh') and relative months. "
+#             "If the user asks about relative dates like next|upcoming|previous|last|current, first calculate the present date and identify it accordingly. "
+#             "Supports retrieving specific sales or calculating the average sales over a given range. "
+#             "If the user asks about sales within a range of months, return data separately for all in-between dates. "
+#             "Read Nepali month names correctly and get their index properly."
+#             "Give the final answer in json question, graph_keys, desc, for_data."
+#             "If it is asked to calculate an average sales between month_1 to month_n then calculate average using average library of python."
+#             "Donot give any description, If you dont know simply leave a blank but donot say anything."
+#         ),
+#     )
+# ]
+
+# memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+# agent = initialize_agent(
+#     tools=tools,
+#     llm=llm,
+#     agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+#     memory=memory,
+#     verbose=True,
+# )
+
+# @app.route("/assistant", methods=["POST"])
+# def assistant():
+#     data = request.get_json()
+
+#     if not data or "query" not in data:
+#         return jsonify({"error": "Query parameter is required"}), 400
+
+#     query = data["query"]
+
+#     historical_data = pd.read_csv(history_data)
+#     historical_data["date"] = historical_data["date"].astype(str)
+#     historical_data[["year", "month"]] = historical_data["date"].str.split("-", expand=True)
+
+#     # Map number to Nepali month names
+#     nepali_months = {
+#         "01": "Baisakh",
+#         "02": "Jestha",
+#         "03": "Ashadh",
+#         "04": "Shrawan",
+#         "05": "Bhadra",
+#         "06": "Ashoj",
+#         "07": "Kartik",
+#         "08": "Mangsir",
+#         "09": "Poush",
+#         "10": "Magh",
+#         "11": "Falgun",
+#         "12": "Chaitra",
+#     }
+
+#     historical_data["nepali_date"] = (
+#         historical_data["year"] + "-" + historical_data["month"].map(nepali_months)
+#     )
+
+#     print(historical_data[["nepali_date"]])
+
+#     response = agent.run(query)
+#     json_response = jsonify(response)
+#     # print("The response is", response)
+
+#     # try:
+#     #     response_json = json.loads(response)
+#     # except json.JSONDecodeError:
+#     #     response_json = {"response": response} 
+     
+
+#     # date_list = historical_data["nepali_date"].astype(str).tolist()
+#     # sales_list = historical_data["sales"].astype(str).tolist()
+
+#     # response_json["data"] = {
+#     #     "date": date_list,
+#     #     "sales": sales_list
+#     # }
+
+#     # json_response = json.dumps(response_json)
+
+#     return json_response
+
+# if __name__ == "__main__":
+#     app.run(debug=True, host="0.0.0.0", port=5000)
