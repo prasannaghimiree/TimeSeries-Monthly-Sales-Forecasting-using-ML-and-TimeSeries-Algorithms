@@ -1,0 +1,27 @@
+{
+    "month_name_to_number": {
+        "baisakh": "01", "baisak": "01", "baishakh": "01", "baishak": "01", "baaisakh": "01", "baisaakh": "01",
+        "jestha": "02", "jeshtha": "02", "jesth": "02", "jeth": "02", "jesths": "02",
+        "asadh": "03", "asad": "03", "ashad": "03", "ashadh": "03", "asaadh": "03", "asar": "03",
+        "shrawan": "04", "saun": "04", "shawan": "04", "sawan": "04", "shraban": "04",
+        "bhadra": "05", "bhadau": "05", "bhadaw": "05", "bhad": "05", "bhaadraa": "05", "bhadraa": "05",
+        "asoj": "06", "ashoj": "06", "ashwin": "06", "ashoz": "06", "aashoj": "06", "ashooj": "06", "aashooj": "06",
+        "kartik": "07", "kattik": "07", "katik": "07", "kaatik": "07", "kattick": "07",
+        "mangsir": "08", "mangshir": "08", "mansir": "08", "mangser": "08", "mangseer": "08", "magsir": "08",
+        "poush": "09", "push": "09", "pous": "09", "posh": "09", "puosh": "09",
+        "magh": "10", "mag": "10", "maag": "10", "marga": "10", "margha": "10",
+        "falgun": "11", "phalgun": "11", "falgoon": "11", "fagun": "11", "flagun": "11", "faaguun": "11", "falgon": "11",
+        "chaitra": "12", "chait": "12", "chaitt": "12", "chaittra": "12", "chaaitraa": "12", "chaeet": "12"
+    },
+    "month_number_to_name": {
+        "01": "Baisakh", "02": "Jestha", "03": "Ashad", "04": "Shrawan", "05": "Bhadra",
+        "06": "Ashoj", "07": "Kartik", "08": "Mangsir", "09": "Poush", "10": "Magh",
+        "11": "Falgun", "12": "Chaitra"
+    },
+    "quarter_to_months": {
+        "1": ["04", "05", "06"], 
+        "2": ["07", "08", "09"], 
+        "3": ["10", "11", "12"],  
+        "4": ["01", "02", "03"]   
+    }
+}

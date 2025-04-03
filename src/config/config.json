@@ -1,0 +1,40 @@
+
+{
+    "databases": [
+        {
+            "user": "JGI_7778",
+            "password": "JGI7778",
+            "host": "10.255.0.103",
+            "port": "1521",
+            "service": "ORCL"
+        },
+        {
+            "user": "JGI_7879",
+            "password": "JGI7879",
+            "host": "192.168.200.119",
+            "port": "1521",
+            "service": "PRASANNA"
+        },
+        {
+            "user": "JGI_7980",
+            "password": "JGI_7980",
+            "host": "192.168.200.119",
+            "port": "1521",
+            "service": "PRASANNA"
+        },
+        {
+            "user": "JGIN8081",
+            "password": "JGIN8081",
+            "host": "192.168.200.119",
+            "port": "1521",
+            "service": "PRASANNA"
+        },
+        {
+            "user": "JGIN8182",
+            "password": "JGIN8182",
+            "host": "192.168.200.119",
+            "port": "1521",
+            "service": "PRASANNA"
+        }
+    ]
+}
