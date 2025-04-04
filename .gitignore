@@ -5,4 +5,5 @@ src/api/__pycache__
 src/core/__pycache__
 src/utils/__pycache__
 venv
+src/config/config.json
 
