@@ -34,6 +34,10 @@ class SalesForecastManager:
         self.month_number_to_name = months["month_number_to_name"]
         self.quarter_to_months = months["quarter_to_months"]
 
+        self.month_name = months["month_name_to_number"]
+        self.month_number = months["month_number_to_name"]
+        self.quarter_month = months["quarter_to_months"]
+ 
         # define paths for datasets and models
         self.historical_data_path = r"data\dataset\total_data.csv"
         self.forecast_output_path = r"data\forecast_output\forecast_data.csv"
@@ -81,8 +85,50 @@ class SalesForecastManager:
         df["year"] = df.index.year
         df["month"] = df.index.month
         df["quarter"] = df.index.quarter
-        for lag in [1, 11, 12, 13]:
-            df[f"lag_{lag}"] = df["sales"].shift(lag)
+
+        acf_values = acf(df['sales'], nlags=13, fft=False)
+        pacf_values = pacf(df["sales"], nlags=13)
+
+        acf_features=[]
+        pacf_features=[]
+
+        for i in range(1,len(acf_values)):
+            if abs(acf_values[i])>0.2:
+                index=i
+                lag=f"lag_{index}"
+                acf_features.append(lag)
+
+        for i in range(1, len(pacf_values)):
+            if abs(pacf_values[i])>0.2:
+                index =i
+                lag=f"lag_index"
+                acf_features.append(lag)
+
+
+        combined_acf_Pacf= (list(set(acf_features+pacf_features)))
+  
+        combined_acf_Pacf.remove("lag_index")
+
+        lag_numbers= []
+
+        for lag in combined_acf_Pacf:
+            if lag.startswith('lag_') and lag != 'lag_index':  
+                lag_num = int(lag.split('_')[1])  
+                lag_numbers.append(lag_num)
+
+                df[lag] = df['sales'].shift(lag_num)
+        
+        # sorting and calculatinglag index as 'lag_1','lag_2' ..... etc
+        lag_numbers.sort()
+        lags = []
+        for lag in lag_numbers:
+            format=f"lag_{lag}"
+            lags.append(format)
+        
+        print("##############################################################################")
+        print(lags)        
+        print("##############################################################################")
+
         df["rolling_mean_3"] = df["sales"].rolling(window=3).mean()
         df["rolling_mean_6"] = df["sales"].rolling(window=6).mean()
         df.dropna(inplace=True)
@@ -105,9 +151,9 @@ class SalesForecastManager:
         joblib.dump(grid_search.best_estimator_, self.model_path)
         joblib.dump(scaler_X, self.scaler_X_path)
         joblib.dump(scaler_y, self.scaler_y_path)
-        self.generate_forecast()
+        self.generate_forecast(lags, lag_numbers)
 
-    def generate_forecast(self):
+    def generate_forecast(self, lags, lag_numbers):
         # forecast data for 12 months
         df = pd.read_csv(self.historical_data_path, parse_dates=["bs_year_month"], index_col="bs_year_month").sort_index().dropna()
         model = joblib.load(self.model_path)
@@ -119,7 +165,20 @@ class SalesForecastManager:
         future_df["year"], future_df["month"], future_df["quarter"] = future_df.index.year, future_df.index.month, future_df.index.quarter
 
         full_df = pd.concat([df, future_df])
-        required_features = ["year", "month", "quarter", "lag_1", "lag_11", "lag_12", "lag_13", "rolling_mean_3", "rolling_mean_6"]
+        lags = lags
+        lag_numbers = list(lag_numbers)
+        
+        lag_numbers.remove(1)
+        print("**********************************************************")
+        print(lag_numbers)
+        print("***********************************************************")
+        
+        # required_features = ["year", "month", "quarter", "lag_1", "lag_11", "lag_12", "lag_13", "rolling_mean_3", "rolling_mean_6"]
+        data_features = ['year', 'month', 'quarter']
+        features= data_features + lags
+        mean_features = ["rolling_mean_3", "rolling_mean_6"]
+        required_features = features + mean_features
+
         forecast_df = full_df.copy()
 
         for i, date in enumerate(future_dates):
@@ -128,7 +187,7 @@ class SalesForecastManager:
             else:
                 forecast_df.loc[date, "lag_1"] = forecast_df.loc[future_dates[i - 1], "sales"]
 
-            for offset in [11, 12, 13]:
+            for offset in lag_numbers:
                 forecast_df.loc[date, f"lag_{offset}"] = forecast_df.get("sales").shift(offset).iloc[-1] or forecast_df[f"lag_{offset}"].mean()
             
             available_data = forecast_df["sales"].dropna()
