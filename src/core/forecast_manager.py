@@ -133,8 +133,11 @@ class SalesForecastManager:
         df["rolling_mean_6"] = df["sales"].rolling(window=6).mean()
         df.dropna(inplace=True)
 
+        
+
         X = df.drop(columns=["sales"])
         y = df["sales"]
+        
 
         scaler_X, scaler_y = StandardScaler(), StandardScaler()
         X_scaled = scaler_X.fit_transform(X)

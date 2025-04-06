@@ -9,6 +9,7 @@ from pytz import timezone
 import pandas as pd
 import nepali_datetime
 from src.core.forecast_manager import SalesForecastManager
+from src.core.brand_forecast_manager import BrandSalesForecastManager
 from src.core.query_parser import QueryParser
 from src.utils.constants import MONTH_NUMBER_TO_NAME
 
@@ -23,6 +24,7 @@ app = Flask(__name__)
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash")
 forecast_manager = SalesForecastManager()
+brand_forecast_manager = BrandSalesForecastManager()
 query_parser = QueryParser(model)
 
 def schedule_train():
@@ -57,8 +59,6 @@ def assistant():
             "query": query, "question": f"Forecasted sales for {query}?",
             "graph_keys": [], "desc": "Oops! Something went wrong.", "data": {}
         }
-
-    # Append historical data
     try:
         historical_data = pd.read_csv(forecast_manager.historical_data_path)
         historical_data["year"] = historical_data["bs_year_month"].str[:4]
@@ -75,7 +75,67 @@ def assistant():
     final_response = json.dumps(response)
     return f"'''{final_response}'''"
 
+@app.route("/brand_assistant", methods=["POST"])
+def brand_assistant():
+    data = request.get_json()
+    if not data or "query" not in data:
+        return jsonify({"error": "Query parameter is required"}), 400
+
+    query = data["query"]
+    logger.info(f"Received brand query: {query}")
+
+    structured_query = query_parser.parse(query)
+    logger.info(f"Structured brand query: {structured_query}")
+
+    #Extract brand from query...
+    brand = None
+    for word in query.split():
+        if word in brand_forecast_manager.brands:
+            brand = word
+            break
+    if brand:
+        structured_query["brand"] = brand
+    else:
+        return jsonify({"error": "Brand not detected in query or invalid brand"}), 400
+
+    try:
+        tool_output = brand_forecast_manager.query_csv(structured_query)
+        response = tool_output
+    except Exception as e:
+        logger.error(f"Error processing brand query: {str(e)}")
+        response = {
+            "query": query, "question": f"Forecasted sales for {query}?",
+            "graph_keys": [], "desc": "Oops! Something went wrong.", "data": {}
+        }
+
+    # Add historical data for the brand
+    try:
+        historical_data = pd.read_csv(brand_forecast_manager.historical_data_path)
+        brand_data = historical_data[historical_data["brand_name"] == brand]
+        brand_data["year"] = brand_data["bs_year_month"].str[:4]
+        brand_data["month_num"] = brand_data["bs_year_month"].str[5:7]
+        brand_data["month"] = brand_data["month_num"].map(MONTH_NUMBER_TO_NAME)
+        response["history"] = {
+            "Date": (brand_data["year"] + "-" + brand_data["month"]).tolist(),
+            "Sales": brand_data["sales"].astype(str).tolist()
+        }
+    except Exception as e:
+        logger.error(f"Error loading brand historical data: {str(e)}")
+        response["history"] = {"Date": [], "Sales": []}
+
+    final_response = json.dumps(response)
+    return f"'''{final_response}'''"
+
 if __name__ == "__main__":
     if not os.path.exists(forecast_manager.model_path) or forecast_manager.forecast_df.empty:
+        logger.info("Training overall sales model...")
         forecast_manager.train_model()
+    # Train brand models if no forecast files exist for any brand
+    any_brand_forecast_exists = any(
+        os.path.exists(f"{brand_forecast_manager.forecast_path_prefix}{brand}.csv")
+        for brand in brand_forecast_manager.brands
+    )
+    if not any_brand_forecast_exists:
+        logger.info("Training brand models...")
+        brand_forecast_manager.train_all_brands()
     app.run(debug=True, host="0.0.0.0", port=5000)
